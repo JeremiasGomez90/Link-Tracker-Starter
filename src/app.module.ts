@@ -1,18 +1,16 @@
-import { Module, ValidationPipe } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { APP_PIPE } from '@nestjs/core';
-import { LinksService } from './links/links.service';
-import { LinksController } from './links/links.controller';
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { LinksModule } from './links/links.module';
 
 @Module({
-  imports: [],
-  controllers: [AppController, LinksController],
-  providers: [
-    LinksService,
-    {
-      provide: APP_PIPE,
-      useClass: ValidationPipe,
-    },
+  imports: [
+    TypeOrmModule.forRoot({
+      type: 'sqlite',
+      database: 'link-tracker.db',
+      entities: [__dirname + '/**/*.entity{.ts,.js}'],
+      synchronize: true,
+    }),
+    LinksModule,
   ],
 })
 export class AppModule {}

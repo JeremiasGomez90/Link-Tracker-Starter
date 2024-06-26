@@ -2,7 +2,7 @@ import { IsDateString, IsOptional, IsString, IsUrl } from 'class-validator';
 
 export class CreateLinkDto {
   @IsUrl({}, { message: 'La URL es invalida' })
-  url: string;
+  originalUrl: string;
 
   @IsOptional()
   @IsString()
@@ -10,5 +10,5 @@ export class CreateLinkDto {
 
   @IsOptional()
   @IsDateString()
-  expirationDate?: string;
+  expiresAt?: string;
 }

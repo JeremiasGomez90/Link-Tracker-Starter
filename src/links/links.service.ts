@@ -1,53 +1,72 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Link } from './link.entity';
 import { v4 as uuidv4 } from 'uuid';
-import { CreateLinkDto } from './dtos/create-link.dto';
 
 @Injectable()
 export class LinksService {
-  private links: Map<
-    string,
-    {
-      url: string;
-      password?: string;
-      expirationDate?: Date;
-      redirectCount: number;
-    }
-  > = new Map();
+  constructor(
+    @InjectRepository(Link)
+    private readonly linkRepository: Repository<Link>,
+  ) {}
 
-  createLink(createLinkDto: CreateLinkDto): string {
-    const linkId = uuidv4().slice(0, 5);
-    this.links.set(linkId, {
-      url: createLinkDto.url,
-      password: createLinkDto.password,
-      expirationDate: createLinkDto.expirationDate
-        ? new Date(createLinkDto.expirationDate)
-        : undefined,
-      redirectCount: 0,
+  async createLink(
+    originalUrl: string,
+    password?: string,
+    expiresAt?: Date,
+  ): Promise<Link> {
+    const maskedUrl = uuidv4().slice(0, 5);
+    const link = await this.linkRepository.findOneBy({ originalUrl });
+    if (link) {
+      throw new NotFoundException('Link duplicated');
+    }
+    const newLink = this.linkRepository.create({
+      originalUrl,
+      maskedUrl,
+      password,
+      expiresAt,
     });
-    return linkId;
+    return this.linkRepository.save(newLink);
   }
 
-  getOriginalUrl(linkId: string, password?: string): string {
-    const link = this.links.get(linkId);
-    if (!link || (link.password && link.password !== password)) {
-      throw new NotFoundException('Link invalido');
+  async getLink(maskedUrl: string): Promise<Link> {
+    const link = await this.linkRepository.findOne({
+      where: {
+        maskedUrl,
+        isValid: true,
+      },
+    });
+    if (!link || (link.expiresAt && link.expiresAt < new Date())) {
+      throw new NotFoundException('Link not found or expired');
     }
-    if (link.expirationDate && link.expirationDate <= new Date()) {
-      throw new NotFoundException('Link expirado');
-    }
-    link.redirectCount++;
-    return link.url;
+    link.count += 1;
+    await this.linkRepository.save(link);
+    return link;
   }
 
-  getRedirectCount(linkId: string): number {
-    const link = this.links.get(linkId);
+  async getLinkStats(maskedUrl: string): Promise<{ count: number }> {
+    const link = await this.linkRepository.findOne({ where: { maskedUrl } });
     if (!link) {
-      throw new NotFoundException('Link invalido');
+      throw new NotFoundException('Link not found');
     }
-    return link.redirectCount;
+    return { count: link.count };
   }
 
-  invalidateLink(linkId: string): boolean {
-    return this.links.delete(linkId);
+  async invalidateLink(maskedUrl: string): Promise<void> {
+    const link = await this.linkRepository.findOne({
+      where: { maskedUrl, isValid: true },
+    });
+    if (!link) {
+      throw new NotFoundException('Link not found');
+    }
+    if (!link.isValid) {
+      throw new NotFoundException('Link invalid');
+    }
+    if (link.expiresAt < new Date()) {
+      throw new NotFoundException('Link expired');
+    }
+    link.isValid = false;
+    await this.linkRepository.save(link);
   }
 }
